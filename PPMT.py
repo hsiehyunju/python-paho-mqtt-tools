@@ -126,7 +126,7 @@ class MQTT:
         """
         self._mqtt_settings_topics[topic] = qos
         if callback != None:
-            self._on_messages[topic] = callable
+            self._on_messages[topic] = callback
 
     # 內部函式，處理連線的 Callback
     def _on_connect_callback(self, client, userdata, flags, rc, properties = None):
@@ -156,10 +156,12 @@ class MQTT:
 
     # 內部函式，收到訊息時觸發的 Callback
     def _on_message_callback(self, client, userdata, message, tmp = None):
-        print('收到訊息')
+
+        topic = message.topic
+        msg = message.payload.decode('utf-8')
+
         if self._on_message:
-            self._on_message(message)
+            self._on_message(topic, msg)
 
         if message.topic in self._on_messages:
-            self._on_messages[message.topic](message)
-
+            self._on_messages[message.topic](msg)
