@@ -16,9 +16,16 @@ class MQTT:
 
     _mqtt_client: mqtt_client.Client = None
     _is_connected: bool = False
-    _on_connect: callable = None
-    _on_disconnect: callable = None
-    _on_message: callable = None
+    
+    # 連線 callback 有一個參數
+    on_connect: callable = None
+    # 斷線 callback 有一個參數
+    on_disconnect: callable = None
+    # 重新連線 callback 有一個參數
+    on_reconnect: callable = None
+    # 收到訊息 callback 有兩個參數，第一個是 topic，第二個是 payload
+    on_message: callable = None
+    
     _on_messages: dict[str, callable] = {}
 
     # MQTT Settings (MQTT 連線設定)
@@ -28,6 +35,9 @@ class MQTT:
     _mqtt_settings_version: MQTTVersion = None
     _mqtt_settings_topics: dict[str, int] = {}
     _mqtt_settings_auto_reconnect: bool = True
+
+    # Other flags
+    _wait_for_reconnect: bool = False
     
     def __init__(self, client_id: str, host: str, port: int, version: MQTTVersion = MQTTVersion.MQTTv311):
         """
@@ -133,25 +143,28 @@ class MQTT:
 
         self._is_connected = rc == 0
 
-        print(self._is_connected)
-
         if rc == 0 and len(self._mqtt_settings_topics) > 0:
             for key, value in self._mqtt_settings_topics.items():
                 self._mqtt_client.subscribe(topic=key, qos=value)
 
-        if self._on_connect:
-            self._on_connect(rc)
+        if self._wait_for_reconnect:
+            self._wait_for_reconnect = False
+            if self.on_reconnect:
+                self.on_reconnect(rc)
+        elif self.on_connect:
+            self.on_connect(rc)
 
     
     # 內部函式，處理中斷連線的 Callback
     def _on_disconnect_callback(self, client, userdata, rc):
         self._is_connected = False
 
-        if self._on_disconnect:
-            self._on_disconnect(rc)
+        if self.on_disconnect:
+            self.on_disconnect(rc)
 
         # 重新連線
         if self._mqtt_settings_auto_reconnect:
+            self._wait_for_reconnect = True
             client.reconnect()
 
     # 內部函式，收到訊息時觸發的 Callback
@@ -160,8 +173,8 @@ class MQTT:
         topic = message.topic
         msg = message.payload.decode('utf-8')
 
-        if self._on_message:
-            self._on_message(topic, msg)
+        if self.on_message:
+            self.on_message(topic, msg)
 
         if message.topic in self._on_messages:
             self._on_messages[message.topic](msg)
